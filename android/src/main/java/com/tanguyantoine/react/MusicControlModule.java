@@ -1,5 +1,6 @@
 package com.tanguyantoine.react;
 
+import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -8,6 +9,8 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.Context;
+
+import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
@@ -81,6 +84,7 @@ public class MusicControlModule extends ReactContextBaseJavaModule implements Co
         super(context);
     }
 
+    @NonNull
     @Override
     public String getName() {
         return "MusicControlManager";
@@ -104,7 +108,6 @@ public class MusicControlModule extends ReactContextBaseJavaModule implements Co
         return map;
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private void createChannel(ReactApplicationContext context) {
         NotificationManager mNotificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
 
@@ -155,6 +158,7 @@ public class MusicControlModule extends ReactContextBaseJavaModule implements Co
         return notificationId;
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     public void init() {
         if (init) return;
 
@@ -181,9 +185,7 @@ public class MusicControlModule extends ReactContextBaseJavaModule implements Co
         pb = new PlaybackStateCompat.Builder();
         pb.setActions(controls);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            createChannel(context);
-        }
+        createChannel(context);
         nb = new NotificationCompat.Builder(context, channelId);
         nb.setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
          nb.setPriority(NotificationCompat.PRIORITY_HIGH);
@@ -201,23 +203,22 @@ public class MusicControlModule extends ReactContextBaseJavaModule implements Co
         filter.addAction(Intent.ACTION_MEDIA_BUTTON);
         filter.addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
         receiver = new MusicControlReceiver(this, context);
-        context.registerReceiver(receiver, filter);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            context.registerReceiver(receiver, filter);
+        }
 
         Intent myIntent = new Intent(context, MusicControlNotification.NotificationService.class);
 
         afListener = new MusicControlAudioFocusListener(context, emitter, volume);
 
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Try to bind the service
-            try {
-                context.bindService(myIntent, connection, Context.BIND_AUTO_CREATE);
-            }
-            catch (Exception ignored){
-                ContextCompat.startForegroundService(context, myIntent);
-            }
+        // Try to bind the service
+        try {
+            context.bindService(myIntent, connection, Context.BIND_AUTO_CREATE);
         }
-        else {
-            context.startService(myIntent);
+        catch (Exception ignored){
+            ContextCompat.startForegroundService(context, myIntent);
         }
 
         context.registerComponentCallbacks(this);
@@ -227,7 +228,7 @@ public class MusicControlModule extends ReactContextBaseJavaModule implements Co
     }
 
     // Create the service connection.
-    private ServiceConnection connection = new ServiceConnection()
+    private final ServiceConnection connection = new ServiceConnection()
     {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service)
@@ -361,9 +362,7 @@ public class MusicControlModule extends ReactContextBaseJavaModule implements Co
         md.putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, description);
         md.putText(MediaMetadataCompat.METADATA_KEY_DATE, date);
         md.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration);
-        if (android.os.Build.VERSION.SDK_INT > 19) {
-            md.putRating(MediaMetadataCompat.METADATA_KEY_RATING, rating);
-        }
+        md.putRating(MediaMetadataCompat.METADATA_KEY_RATING, rating);
 
         nb.setContentTitle(title);
         nb.setContentText(artist);
